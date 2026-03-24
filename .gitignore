@@ -1,0 +1,6 @@
+node_modules/
+dist/
+downloads/
+config/feishu.json
+*.log
+.DS_Store

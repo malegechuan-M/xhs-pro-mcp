@@ -1,0 +1,61 @@
+{
+  "appId": "YOUR_FEISHU_APP_ID",
+  "appSecret": "YOUR_FEISHU_APP_SECRET",
+  "appToken": "YOUR_FEISHU_BITABLE_APP_TOKEN",
+  "tables": {
+    "采集库": "YOUR_TABLE_ID",
+    "关键词战情库": "YOUR_TABLE_ID",
+    "博主笔记库": "YOUR_TABLE_ID",
+    "博主库": "YOUR_TABLE_ID"
+  },
+  "_comment": "fields 右边是飞书实际字段名，按需修改，左边不要动",
+  "fields": {
+    "采集库": {
+      "noteId":       "文本",
+      "url":          "原文链接",
+      "title":        "标题",
+      "content":      "正文",
+      "author":       "博主",
+      "authorUrl":    "",
+      "likeCount":    "点赞数",
+      "collectCount": "收藏数",
+      "commentCount": "评论数",
+      "tags":         "话题标签",
+      "noteType":     "类型",
+      "imageCount":   "",
+      "videoUrl":     "视频链接",
+      "publishTime":  "发布时间",
+      "capturedAt":   "采集时间"
+    },
+    "关键词战情库": {
+      "keyword":    "关键词",
+      "rank":       "排名位置",
+      "noteId":     "笔记ID",
+      "url":        "笔记链接",
+      "title":      "标题",
+      "author":     "博主",
+      "likeCount":  "点赞数",
+      "noteType":   "内容类型",
+      "coverImage": "封面链接",
+      "capturedAt": "采集时间"
+    },
+    "博主笔记库": {
+      "noteId":     "文本",
+      "url":        "笔记链接",
+      "title":      "标题",
+      "author":     "博主",
+      "likeCount":  "点赞数",
+      "coverImage": "封面链接",
+      "capturedAt": ""
+    },
+    "博主库": {
+      "bloggerUrl":     "主页链接",
+      "bloggerName":    "博主名称",
+      "bloggerId":      "小红书号",
+      "description":    "简介",
+      "avatarUrl":      "头像链接",
+      "followersCount": "粉丝数",
+      "capturedAt":     "采集时间"
+    }
+  }
+}
