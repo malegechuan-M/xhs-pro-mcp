@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from 'fs';
 import { resolve, extname } from 'path';
 import { config } from '../config/index.js';
 import { getContext } from '../browser/launcher.js';
+import { wait, gaussian } from '../browser/human.js';
 
 export interface DownloadResult {
   url: string;
@@ -96,29 +97,48 @@ export async function downloadFile(
   const fileName  = customName ?? buildFileName(url);
   const localPath = resolve(dir, fileName);
 
-  try {
-    const ctx = await getContext(true);
-    const downloadUrl = guessExt(url) === '.jpg' ? toJpgUrl(url) : url;
-    const res = await ctx.request.get(downloadUrl, {
-      headers: {
-        Referer:  'https://www.xiaohongshu.com/',
-        Accept:   'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
-        'User-Agent': config.userAgent,
-      },
-      timeout: 30000,
-    });
+  const maxRetries = 3;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const ctx = await getContext(true);
+      const downloadUrl = guessExt(url) === '.jpg' ? toJpgUrl(url) : url;
+      const res = await ctx.request.get(downloadUrl, {
+        headers: {
+          Referer:  'https://www.xiaohongshu.com/',
+          Accept:   'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
+          'Accept-Language': 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7',
+          'User-Agent': config.userAgent,
+        },
+        timeout: 30000,
+      });
 
-    if (!res.ok()) throw new Error(`HTTP ${res.status()}: ${res.statusText()}`);
+      // Retry on 429 / 5xx with exponential backoff
+      if (res.status() === 429 || res.status() >= 500) {
+        if (attempt < maxRetries - 1) {
+          const backoff = Math.pow(2, attempt) * 1000 + gaussian(500, 200);
+          await wait(backoff);
+          continue;
+        }
+      }
 
-    const body = await res.body();
-    writeFileSync(localPath, body);
-    return { url, localPath, fileName, size: body.length, success: true };
-  } catch (err) {
-    return {
-      url, localPath, fileName, size: 0, success: false,
-      error: err instanceof Error ? err.message : String(err),
-    };
+      if (!res.ok()) throw new Error(`HTTP ${res.status()}: ${res.statusText()}`);
+
+      const body = await res.body();
+      writeFileSync(localPath, body);
+      return { url, localPath, fileName, size: body.length, success: true };
+    } catch (err) {
+      if (attempt < maxRetries - 1) {
+        const backoff = Math.pow(2, attempt) * 1000 + gaussian(500, 200);
+        await wait(backoff);
+        continue;
+      }
+      return {
+        url, localPath, fileName, size: 0, success: false,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
   }
+  return { url, localPath, fileName, size: 0, success: false, error: 'Max retries exceeded' };
 }
 
 /**
@@ -143,6 +163,10 @@ export async function downloadAll(
       }),
     );
     results.push(...batchResults);
+    // Add a natural pause between batches
+    if (i + concurrency < urls.length) {
+      await wait(gaussian(800, 250));
+    }
   }
 
   return results;

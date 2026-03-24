@@ -7,16 +7,13 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { newPage } from '../browser/launcher.js';
 import { checkCaptcha, captureSearchResults } from '../engines/dom/capturer.js';
+import { humanClick, humanClickLocator, humanType, humanTypeLocator, wait, gaussian, THINK, GLANCE, HESITATE } from '../browser/human.js';
 
 const XHS_HOME = 'https://www.xiaohongshu.com';
 const NOTE_BASE = 'https://www.xiaohongshu.com/explore';
 
 function noteUrl(noteId: string): string {
   return `${NOTE_BASE}/${noteId}`;
-}
-
-async function delay(ms: number): Promise<void> {
-  await new Promise((r) => setTimeout(r, ms));
 }
 
 export function registerInteractTools(server: McpServer): void {
@@ -32,7 +29,7 @@ export function registerInteractTools(server: McpServer): void {
       const page = await newPage();
       try {
         await page.goto(noteUrl(noteId), { waitUntil: 'domcontentloaded', timeout: 30000 });
-        await page.waitForSelector('.like-wrapper, .interaction-container', { timeout: 15000 }).catch(() => delay(2000));
+        await page.waitForSelector('.like-wrapper, .interaction-container', { timeout: 15000 }).catch(() => wait(2000));
         if (await checkCaptcha(page)) throw new Error('CAPTCHA_DETECTED');
 
         // Find the like button wrapper
@@ -46,8 +43,8 @@ export function registerInteractTools(server: McpServer): void {
           return { content: [{ type: 'text' as const, text: '笔记已点赞，无需重复操作。' }] };
         }
 
-        await likeBtn.click();
-        await delay(1500);
+        await humanClickLocator(page, likeBtn);
+        await wait(THINK());
         const newCount = await page.locator('.like-wrapper .count').textContent();
 
         return {
@@ -74,7 +71,7 @@ export function registerInteractTools(server: McpServer): void {
       const page = await newPage();
       try {
         await page.goto(noteUrl(noteId), { waitUntil: 'domcontentloaded', timeout: 30000 });
-        await page.waitForSelector('.collect-wrapper, .interaction-container', { timeout: 15000 }).catch(() => delay(2000));
+        await page.waitForSelector('.collect-wrapper, .interaction-container', { timeout: 15000 }).catch(() => wait(2000));
         if (await checkCaptcha(page)) throw new Error('CAPTCHA_DETECTED');
 
         const collectBtn = page.locator('.collect-wrapper, [class*="collect-btn"]').first();
@@ -87,8 +84,8 @@ export function registerInteractTools(server: McpServer): void {
           return { content: [{ type: 'text' as const, text: '笔记已收藏，无需重复操作。' }] };
         }
 
-        await collectBtn.click();
-        await delay(1500);
+        await humanClickLocator(page, collectBtn);
+        await wait(THINK());
         const newCount = await page.locator('.collect-wrapper .count').textContent();
 
         return {
@@ -115,24 +112,23 @@ export function registerInteractTools(server: McpServer): void {
       const page = await newPage();
       try {
         await page.goto(noteUrl(noteId), { waitUntil: 'domcontentloaded', timeout: 30000 });
-        await page.waitForSelector('.interaction-container, .note-detail', { timeout: 15000 }).catch(() => delay(2000));
+        await page.waitForSelector('.interaction-container, .note-detail', { timeout: 15000 }).catch(() => wait(2000));
         if (await checkCaptcha(page)) throw new Error('CAPTCHA_DETECTED');
 
         // Click the comment input area to focus it
+        await humanClick(page, '.comment-input, [placeholder*="评论"], .input-box textarea, .chat-input');
+        await wait(HESITATE());
+
+        // Type comment character by character
         const commentInput = page.locator(
           '.comment-input, [placeholder*="评论"], .input-box textarea, .chat-input',
         ).first();
-        await commentInput.click();
-        await delay(500);
-        await commentInput.fill(content);
-        await delay(800);
+        await humanTypeLocator(page, commentInput, content);
+        await wait(GLANCE());
 
         // Submit button
-        const submitBtn = page.locator(
-          '.submit-btn, button:has-text("发布"), .comment-submit, .send-btn',
-        ).first();
-        await submitBtn.click();
-        await delay(2000);
+        await humanClick(page, '.submit-btn, button:has-text("发布"), .comment-submit, .send-btn');
+        await wait(THINK());
 
         return {
           content: [{
@@ -159,7 +155,7 @@ export function registerInteractTools(server: McpServer): void {
       const page = await newPage();
       try {
         await page.goto(noteUrl(noteId), { waitUntil: 'domcontentloaded', timeout: 30000 });
-        await page.waitForSelector('.interaction-container, .note-detail', { timeout: 15000 }).catch(() => delay(2000));
+        await page.waitForSelector('.interaction-container, .note-detail', { timeout: 15000 }).catch(() => wait(2000));
         if (await checkCaptcha(page)) throw new Error('CAPTCHA_DETECTED');
 
         // Find comment items and click the target reply button
@@ -168,20 +164,17 @@ export function registerInteractTools(server: McpServer): void {
         if (count === 0) throw new Error('未找到任何评论回复按钮');
         if (commentIndex >= count) throw new Error(`评论下标 ${commentIndex} 超出范围（共 ${count} 条）`);
 
-        await replyBtns.nth(commentIndex).click();
-        await delay(800);
+        await humanClickLocator(page, replyBtns.nth(commentIndex));
+        await wait(GLANCE());
 
         const replyInput = page.locator(
           '.reply-input, .comment-input, [placeholder*="回复"], .chat-input',
         ).first();
-        await replyInput.fill(content);
-        await delay(600);
+        await humanTypeLocator(page, replyInput, content);
+        await wait(HESITATE());
 
-        const submitBtn = page.locator(
-          '.submit-btn, button:has-text("发布"), .comment-submit, .send-btn',
-        ).first();
-        await submitBtn.click();
-        await delay(2000);
+        await humanClick(page, '.submit-btn, button:has-text("发布"), .comment-submit, .send-btn');
+        await wait(THINK());
 
         return {
           content: [{
@@ -206,7 +199,7 @@ export function registerInteractTools(server: McpServer): void {
       const page = await newPage();
       try {
         await page.goto(XHS_HOME, { waitUntil: 'domcontentloaded', timeout: 30000 });
-        await page.waitForSelector('.note-item, section.note-item, [class*="NoteItem"]', { timeout: 15000 }).catch(() => delay(2500));
+        await page.waitForSelector('.note-item, section.note-item, [class*="NoteItem"]', { timeout: 15000 }).catch(() => wait(2500));
         if (await checkCaptcha(page)) throw new Error('CAPTCHA_DETECTED');
 
         const cards = await page.evaluate((maxItems) => {

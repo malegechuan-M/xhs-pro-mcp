@@ -6,6 +6,7 @@
 
 import { Page } from 'playwright';
 import * as SEL from './selectors.js';
+import { gaussian, humanScroll, humanScrollPage, wait, GLANCE, THINK } from '../../browser/human.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -63,10 +64,11 @@ export interface BloggerNote {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Random delay between [min, max] ms — mirrors extension strategy */
-async function randomDelay(page: Page, min = 1500, max = 3000): Promise<void> {
-  const ms = min + Math.random() * (max - min);
-  await page.waitForTimeout(ms);
+/** Gaussian-distributed delay (replaces uniform random for more natural timing) */
+async function randomDelay(_page: Page, min = 1500, max = 3000): Promise<void> {
+  const mean = (min + max) / 2;
+  const stddev = (max - min) / 4;
+  await wait(gaussian(mean, stddev));
 }
 
 /** Detect captcha overlay and pause until dismissed */
@@ -609,8 +611,8 @@ export async function captureSearchResults(
     noNewRounds = addedThisRound === 0 ? noNewRounds + 1 : 0;
     if (noNewRounds >= 3) break;
 
-    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-    await randomDelay(page, 600, 1000);
+    await humanScrollPage(page);
+    await wait(gaussian(800, 200));
   }
 
   return results;
@@ -642,8 +644,6 @@ export async function captureBloggerNotes(
   const links: BloggerNote[] = [];
   const seen = new Set<string>();
   const maxSteps = limit > 0 ? Math.max(50, Math.ceil(limit / 5) * 6) : 300;
-  const scrollIncrement = 500;
-  let scrollPosition = 0;
   let attemptsWithoutNew = 0;
 
   for (let step = 0; step < maxSteps && attemptsWithoutNew < 5; step++) {
@@ -728,9 +728,9 @@ export async function captureBloggerNotes(
 
     attemptsWithoutNew = added === 0 ? attemptsWithoutNew + 1 : 0;
 
-    scrollPosition = Math.min(scrollPosition + scrollIncrement,
-      await page.evaluate(() => document.body.scrollHeight - window.innerHeight));
-    await page.evaluate((pos) => window.scrollTo(0, pos), scrollPosition);
+    // Scroll down by a randomized amount (human-like variable distance)
+    const scrollDist = Math.round(gaussian(450, 120)); // 300-600px range
+    await humanScroll(page, scrollDist);
 
     // Wait for at least one visible card to have a numeric like count loaded
     // (intersection-observer lazy-load on blogger profile pages)
@@ -748,8 +748,8 @@ export async function captureBloggerNotes(
 
   // Final pass at the bottom — only when limit is not yet satisfied (or no limit)
   if (!(limit > 0 && links.length >= limit)) {
-    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-    await randomDelay(page, 800, 1200);
+    await humanScrollPage(page);
+    await wait(gaussian(1000, 250));
 
     const finalBatch = await page.evaluate(
       ({ FEED_CARD, FEED_CARD_LINK, FEED_CARD_IMG, FEED_CARD_TITLE, FEED_CARD_AUTHOR, authorName }) => {

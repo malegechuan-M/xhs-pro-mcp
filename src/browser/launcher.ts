@@ -53,21 +53,27 @@ export async function getContext(headless = true): Promise<BrowserContext> {
     headless,
 
     args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
       '--disable-blink-features=AutomationControlled',
       '--disable-features=IsolateOrigins,site-per-process',
       '--disable-infobars',
       '--disable-notifications',
+      '--disable-dev-shm-usage',
     ],
 
-    viewport: { width: 1440, height: 900 },
+    // Slightly randomize viewport each launch to avoid fingerprint consistency
+    viewport: {
+      width:  1440 + Math.floor(Math.random() * 40) - 20,  // 1420-1460
+      height:  900 + Math.floor(Math.random() * 40) - 20,  //  880-920
+    },
     locale: 'zh-CN',
     timezoneId: 'Asia/Shanghai',
 
-    userAgent:
-      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
-      '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    // Pick a recent Chrome version from a realistic pool
+    userAgent: (() => {
+      const versions = ['122.0.0.0', '123.0.0.0', '124.0.0.0', '125.0.0.0', '126.0.0.0'];
+      const ver = versions[Math.floor(Math.random() * versions.length)];
+      return `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${ver} Safari/537.36`;
+    })(),
 
     // Ignore HTTPS errors from XHS CDN subdomains
     ignoreHTTPSErrors: true,

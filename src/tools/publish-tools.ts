@@ -8,12 +8,9 @@ import { z } from 'zod';
 import { existsSync } from 'fs';
 import { newPage } from '../browser/launcher.js';
 import { checkCaptcha } from '../engines/dom/capturer.js';
+import { humanClick, humanClickLocator, humanType, humanTypeLocator, wait, gaussian, THINK, GLANCE, HESITATE } from '../browser/human.js';
 
 const CREATOR_URL = 'https://creator.xiaohongshu.com/publish/publish';
-
-async function delay(ms: number): Promise<void> {
-  await new Promise((r) => setTimeout(r, ms));
-}
 
 export function registerPublishTools(server: McpServer): void {
   // ── publish_note ─────────────────────────────────────────────────────────────
@@ -37,39 +34,34 @@ export function registerPublishTools(server: McpServer): void {
       const page = await newPage(false /* visible for file chooser */);
       try {
         await page.goto(CREATOR_URL, { waitUntil: 'networkidle', timeout: 30000 });
-        await delay(2000);
+        await wait(THINK());
         if (await checkCaptcha(page)) throw new Error('CAPTCHA_DETECTED');
 
         // Upload images
         const uploadInput = page.locator('input[type="file"][accept*="image"]').first();
         await uploadInput.setInputFiles(imagePaths);
-        await delay(3000 + imagePaths.length * 1000); // wait for upload
+        await wait(3000 + imagePaths.length * 1000); // wait for upload
 
-        // Fill title
-        const titleInput = page.locator(
-          'input[placeholder*="标题"], .title-input input, [data-placeholder*="标题"]',
-        ).first();
-        await titleInput.click();
-        await titleInput.fill(title);
-        await delay(500);
+        // Fill title (human typing)
+        await humanType(page, 'input[placeholder*="标题"], .title-input input, [data-placeholder*="标题"]', title);
+        await wait(GLANCE());
 
-        // Fill body content
+        // Fill body content (human typing)
         const bodyInput = page.locator(
           '.content-input, [contenteditable="true"], .desc-input, textarea[placeholder*="正文"]',
         ).first();
-        await bodyInput.click();
-        await bodyInput.fill(content);
-        await delay(500);
+        await humanTypeLocator(page, bodyInput, content);
+        await wait(GLANCE());
 
         // Add tags
         for (const tag of tags) {
-          await bodyInput.type(` #${tag}`);
-          await delay(300);
+          await humanTypeLocator(page, bodyInput, ` #${tag}`);
+          await wait(HESITATE());
           // Accept the topic suggestion if it appears
           const suggestion = page.locator('.topic-list .topic-item, [class*="topic"]').first();
           if (await suggestion.isVisible({ timeout: 1500 }).catch(() => false)) {
-            await suggestion.click();
-            await delay(300);
+            await humanClickLocator(page, suggestion);
+            await wait(HESITATE());
           }
         }
 
@@ -79,17 +71,14 @@ export function registerPublishTools(server: McpServer): void {
             'button:has-text("私密"), [class*="privacy"]',
           ).first();
           if (await privacyBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-            await privacyBtn.click();
-            await delay(500);
+            await humanClickLocator(page, privacyBtn);
+            await wait(GLANCE());
           }
         }
 
         // Publish
-        const publishBtn = page.locator(
-          'button:has-text("发布"), .publish-btn, [class*="submit"]',
-        ).first();
-        await publishBtn.click();
-        await delay(3000);
+        await humanClick(page, 'button:has-text("发布"), .publish-btn, [class*="submit"]');
+        await wait(THINK());
 
         // Check for success URL
         const currentUrl = page.url();
@@ -126,7 +115,7 @@ export function registerPublishTools(server: McpServer): void {
       const page = await newPage(false);
       try {
         await page.goto(CREATOR_URL, { waitUntil: 'networkidle', timeout: 30000 });
-        await delay(2000);
+        await wait(THINK());
         if (await checkCaptcha(page)) throw new Error('CAPTCHA_DETECTED');
 
         // Switch to video tab if visible
@@ -134,14 +123,14 @@ export function registerPublishTools(server: McpServer): void {
           'button:has-text("上传视频"), [class*="video-tab"], a:has-text("视频")',
         ).first();
         if (await videoTab.isVisible({ timeout: 2000 }).catch(() => false)) {
-          await videoTab.click();
-          await delay(1000);
+          await humanClickLocator(page, videoTab);
+          await wait(GLANCE());
         }
 
         // Upload video
         const uploadInput = page.locator('input[type="file"][accept*="video"]').first();
         await uploadInput.setInputFiles(videoPath);
-        await delay(5000); // longer wait for video processing
+        await wait(5000); // longer wait for video processing
 
         // Poll for upload completion (max 3 minutes)
         let uploaded = false;
@@ -149,51 +138,45 @@ export function registerPublishTools(server: McpServer): void {
           const progress = page.locator('[class*="upload-progress"], .progress-bar');
           const done = await progress.isHidden({ timeout: 2000 }).catch(() => true);
           if (done) { uploaded = true; break; }
-          await delay(5000);
+          await wait(5000);
         }
         if (!uploaded) throw new Error('视频上传超时（3分钟），请检查网络或文件大小');
 
-        // Fill title
-        const titleInput = page.locator(
-          'input[placeholder*="标题"], .title-input input',
-        ).first();
-        await titleInput.click();
-        await titleInput.fill(title);
-        await delay(500);
+        // Fill title (human typing)
+        await humanType(page, 'input[placeholder*="标题"], .title-input input', title);
+        await wait(GLANCE());
 
         // Fill body
         if (content) {
           const bodyInput = page.locator(
             '.content-input, [contenteditable="true"], textarea[placeholder*="正文"]',
           ).first();
-          await bodyInput.click();
-          await bodyInput.fill(content);
-          await delay(500);
+          await humanTypeLocator(page, bodyInput, content);
+          await wait(GLANCE());
         }
 
         // Tags
         for (const tag of tags) {
           const bodyInput = page.locator('[contenteditable="true"]').first();
-          await bodyInput.type(` #${tag}`);
-          await delay(300);
+          await humanTypeLocator(page, bodyInput, ` #${tag}`);
+          await wait(HESITATE());
           const suggestion = page.locator('.topic-list .topic-item').first();
           if (await suggestion.isVisible({ timeout: 1500 }).catch(() => false)) {
-            await suggestion.click();
-            await delay(300);
+            await humanClickLocator(page, suggestion);
+            await wait(HESITATE());
           }
         }
 
         if (visibility === 'private') {
           const privacyBtn = page.locator('button:has-text("私密")').first();
           if (await privacyBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-            await privacyBtn.click();
-            await delay(500);
+            await humanClickLocator(page, privacyBtn);
+            await wait(GLANCE());
           }
         }
 
-        const publishBtn = page.locator('button:has-text("发布"), .publish-btn').first();
-        await publishBtn.click();
-        await delay(3000);
+        await humanClick(page, 'button:has-text("发布"), .publish-btn');
+        await wait(THINK());
 
         const currentUrl = page.url();
         const published = currentUrl.includes('success') || currentUrl.includes('explore');
