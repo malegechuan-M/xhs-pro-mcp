@@ -897,3 +897,149 @@ export async function captureBloggerInfo(page: Page, profileUrl: string): Promis
     capturedAt: new Date().toISOString(),
   };
 }
+
+// ─── Comment capture ─────────────────────────────────────────────────────────
+
+export interface CommentReply {
+  author: string;
+  content: string;
+  likeCount: number;
+  time: string;
+}
+
+export interface CommentData {
+  author: string;
+  content: string;
+  likeCount: number;
+  time: string;
+  replies: CommentReply[];
+}
+
+export async function captureComments(
+  page: Page,
+  noteId: string,
+  limit = 50,
+  includeReplies = true,
+): Promise<CommentData[]> {
+  const notePageUrl = `https://www.xiaohongshu.com/explore/${noteId}`;
+  await page.goto(notePageUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+  await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
+
+  // Wait for the comment section to load
+  await page.waitForSelector(
+    SEL.COMMENT_ITEM.join(', '),
+    { timeout: 10000 },
+  ).catch(() => {});
+
+  if (await checkCaptcha(page)) throw new Error('CAPTCHA_DETECTED');
+
+  await wait(GLANCE());
+
+  // Scroll down to load more comments until we have enough or no new ones appear
+  let prevCount = 0;
+  let noNewRounds = 0;
+  const maxScrollSteps = Math.max(10, Math.ceil(limit / 5) * 2);
+
+  for (let step = 0; step < maxScrollSteps; step++) {
+    const currentCount = await page.evaluate(
+      (selectors) => document.querySelectorAll(selectors).length,
+      SEL.COMMENT_ITEM.join(', '),
+    );
+
+    if (currentCount >= limit) break;
+    if (currentCount === prevCount) {
+      noNewRounds++;
+      if (noNewRounds >= 3) break;
+    } else {
+      noNewRounds = 0;
+    }
+    prevCount = currentCount;
+
+    // Try clicking "show more" / "展开更多" buttons
+    for (const showMoreSel of SEL.COMMENT_SHOW_MORE) {
+      const showMore = page.locator(showMoreSel).first();
+      if (await showMore.isVisible({ timeout: 500 }).catch(() => false)) {
+        await showMore.click().catch(() => {});
+        await wait(gaussian(600, 150));
+      }
+    }
+
+    await humanScroll(page, Math.round(gaussian(400, 100)));
+    await wait(gaussian(800, 200));
+
+    if (await checkCaptcha(page)) throw new Error('CAPTCHA_DETECTED');
+  }
+
+  // Extract comments from the DOM
+  const comments = await page.evaluate(
+    ({ COMMENT_ITEM, COMMENT_CONTENT, COMMENT_AUTHOR, COMMENT_TIME,
+       COMMENT_LIKE, COMMENT_REPLY_ITEM, includeReplies, limit }) => {
+
+      const firstText = (root: Element, selectors: string[]): string => {
+        for (const s of selectors) {
+          const el = root.querySelector(s);
+          if (el?.textContent?.trim()) return el.textContent.trim();
+        }
+        return '';
+      };
+
+      const parseCount = (text: string): number => {
+        const clean = (text || '').replace(/\s+/g, '').toLowerCase();
+        const m = clean.match(/([\d.]+)/);
+        if (!m) return 0;
+        const n = parseFloat(m[1]);
+        if (clean.includes('w') || clean.includes('万')) return Math.round(n * 10000);
+        if (clean.includes('k') || clean.includes('千')) return Math.round(n * 1000);
+        return Math.round(n);
+      };
+
+      const extractComment = (el: Element) => ({
+        author:    firstText(el, COMMENT_AUTHOR),
+        content:   firstText(el, COMMENT_CONTENT),
+        likeCount: parseCount(firstText(el, COMMENT_LIKE)),
+        time:      firstText(el, COMMENT_TIME),
+      });
+
+      const items = Array.from(document.querySelectorAll(COMMENT_ITEM.join(', ')));
+      const results: Array<{
+        author: string; content: string; likeCount: number; time: string;
+        replies: Array<{ author: string; content: string; likeCount: number; time: string }>;
+      }> = [];
+
+      for (const item of items) {
+        if (results.length >= limit) break;
+
+        const comment = {
+          ...extractComment(item),
+          replies: [] as Array<{ author: string; content: string; likeCount: number; time: string }>,
+        };
+
+        // Skip empty comments (likely structural containers)
+        if (!comment.content && !comment.author) continue;
+
+        if (includeReplies) {
+          const replyEls = Array.from(item.querySelectorAll(COMMENT_REPLY_ITEM.join(', ')));
+          for (const replyEl of replyEls) {
+            comment.replies.push(extractComment(replyEl));
+          }
+        }
+
+        results.push(comment);
+      }
+
+      return results;
+    },
+    {
+      COMMENT_ITEM: SEL.COMMENT_ITEM,
+      COMMENT_CONTENT: SEL.COMMENT_CONTENT,
+      COMMENT_AUTHOR: SEL.COMMENT_AUTHOR,
+      COMMENT_TIME: SEL.COMMENT_TIME,
+      COMMENT_LIKE: SEL.COMMENT_LIKE,
+      COMMENT_REPLY_ITEM: SEL.COMMENT_REPLY_ITEM,
+      includeReplies,
+      limit,
+    },
+  );
+
+  return comments;
+}

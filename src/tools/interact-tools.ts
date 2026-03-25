@@ -6,7 +6,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { newPage } from '../browser/launcher.js';
-import { checkCaptcha, captureSearchResults } from '../engines/dom/capturer.js';
+import { checkCaptcha, captureSearchResults, captureComments } from '../engines/dom/capturer.js';
 import { humanClick, humanClickLocator, humanType, humanTypeLocator, wait, gaussian, THINK, GLANCE, HESITATE } from '../browser/human.js';
 
 const XHS_HOME = 'https://www.xiaohongshu.com';
@@ -243,6 +243,49 @@ export function registerInteractTools(server: McpServer): void {
           content: [{
             type: 'text' as const,
             text: `首页推荐流 ${cards.length} 条:\n\n${text}`,
+          }],
+        };
+      } finally {
+        await page.close();
+      }
+    },
+  );
+
+  // ── capture_comments ──────────────────────────────────────────────────────
+  server.tool(
+    'xhs_capture_comments',
+    'Capture comments from a XiaoHongShu note, including replies.',
+    {
+      noteId: z.string().describe('Note ID'),
+      limit: z.number().optional().describe('Max comments to capture (default: 50)'),
+      includeReplies: z.boolean().optional().describe('Include sub-replies (default: true)'),
+    },
+    async ({ noteId, limit = 50, includeReplies = true }) => {
+      const page = await newPage();
+      try {
+        const comments = await captureComments(page, noteId, limit, includeReplies);
+
+        if (comments.length === 0) {
+          return {
+            content: [{ type: 'text' as const, text: '该笔记暂无评论，或评论未加载成功。' }],
+          };
+        }
+
+        const lines = comments.map((c, i) => {
+          let line = `${i + 1}. **${c.author}** (${c.time || '未知时间'}) [赞${c.likeCount}]\n   ${c.content}`;
+          if (c.replies.length > 0) {
+            const replyLines = c.replies.map(
+              (r) => `   ↳ **${r.author}** (${r.time || ''}) [赞${r.likeCount}]: ${r.content}`,
+            );
+            line += '\n' + replyLines.join('\n');
+          }
+          return line;
+        });
+
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `笔记 ${noteId} 共采集 ${comments.length} 条评论:\n\n${lines.join('\n\n')}`,
           }],
         };
       } finally {

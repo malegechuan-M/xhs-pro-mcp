@@ -30,7 +30,7 @@ xhs_setup({
 })
 ```
 
-## 3. 全部工具（共22个）
+## 3. 全部工具（共23个）
 
 ### 系统工具（4个）
 | 工具 | 功能 | 参数 |
@@ -40,13 +40,14 @@ xhs_setup({
 | `xhs_check_status` | 检查登录状态/飞书连接/存储统计 | - |
 | `xhs_setup` | 首次设置引导向导 | 飞书凭证等 |
 
-### 采集工具（7个）
+### 采集工具（8个）
 | 工具 | 功能 | 参数 |
 |------|------|------|
 | `xhs_capture_note` | 采集单篇笔记详情 | url, syncToFeishu?, downloadMedia? |
 | `xhs_search_notes` | 关键词搜索笔记 | keyword, maxResults?, sortMode?, captureDetails?, syncToFeishu? |
 | `xhs_capture_blogger_notes` | 采集博主所有笔记 | profileUrl, limit?, syncToFeishu? |
 | `xhs_capture_blogger_info` | 采集博主信息 | profileUrl, syncToFeishu? |
+| `xhs_capture_comments` | 采集笔记评论列表 | noteId, limit?, includeReplies? |
 | `xhs_batch_capture_notes` | 批量采集多篇笔记 | urls, syncToFeishu?, downloadMedia? |
 | `xhs_get_feeds` | 获取首页推荐流 | limit? |
 | `xhs_list_downloads` | 查看已下载文件 | subDir? |

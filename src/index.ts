@@ -295,4 +295,4 @@ server.tool(
 // ─────────────────────────────────────────────────────────────────────────────
 const transport = new StdioServerTransport();
 await server.connect(transport);
-console.error('[xhs-pro-mcp] Server started — 22 tools registered');
+console.error('[xhs-pro-mcp] Server started — 23 tools registered');

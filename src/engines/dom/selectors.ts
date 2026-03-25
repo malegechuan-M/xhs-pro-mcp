@@ -124,6 +124,68 @@ export const FEED_CARD_IMG = [
 export const FEED_CARD_TITLE = '.title, .content-title, .note-title, .desc, .content, .note-desc, .note-content';
 export const FEED_CARD_AUTHOR = '.author span, .user-name, .nickname, .name';
 
+// ─── Comment section ─────────────────────────────────────────────────────────
+
+export const COMMENT_SECTION = [
+  '.comments-container',
+  '.comment-container',
+  '.comments-section',
+  '.interact-comment',
+  '.comment-list',
+  '#noteContainer .comments',
+];
+
+export const COMMENT_ITEM = [
+  '.comment-item',
+  '.comment-inner-container',
+  '.parent-comment',
+  '.comment',
+];
+
+export const COMMENT_CONTENT = [
+  '.comment-content .note-text',
+  '.comment-content',
+  '.comment-text',
+  '.content',
+];
+
+export const COMMENT_AUTHOR = [
+  '.comment-user .author-name',
+  '.comment-item .author-name',
+  '.comment-author',
+  '.author-name',
+  '.user-name',
+  '.username',
+];
+
+export const COMMENT_TIME = [
+  '.comment-time',
+  '.time',
+  '.date',
+  '.timestamp',
+];
+
+export const COMMENT_LIKE = [
+  '.comment-like .count',
+  '.like-wrapper .count',
+  '.count',
+];
+
+export const COMMENT_REPLY_ITEM = [
+  '.reply-item',
+  '.sub-comment-item',
+  '.sub-comment',
+  '.reply',
+];
+
+export const COMMENT_SHOW_MORE = [
+  '.show-more',
+  '.view-more-comment',
+  '.expand-reply',
+  '[class*="show-more"]',
+  'span:has-text("展开更多")',
+];
+
 // ─── Captcha detection ────────────────────────────────────────────────────────
 
 export const CAPTCHA_OVERLAY = [
