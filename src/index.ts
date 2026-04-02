@@ -10,6 +10,7 @@ import { registerFeishuTools } from './tools/feishu-tools.js';
 import { registerInteractTools } from './tools/interact-tools.js';
 import { registerPublishTools } from './tools/publish-tools.js';
 import { registerOrchestrateTools } from './tools/orchestrate-tools.js';
+import { registerDiscoverTagsTool } from './tools/discover-tags.js';
 import { newPage } from './browser/launcher.js';
 import {
   captureNote,
@@ -38,6 +39,7 @@ registerFeishuTools(server);
 registerInteractTools(server);
 registerPublishTools(server);
 registerOrchestrateTools(server);
+registerDiscoverTagsTool(server);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tool 1: xhs_capture_note
@@ -49,15 +51,20 @@ server.tool(
     url: z.string().url().describe('Full URL of the XiaoHongShu note'),
     syncToFeishu: z.boolean().optional().describe('Sync to Feishu 采集库 (default: false)'),
     downloadMedia: z.boolean().optional().describe('Download images locally (default: false)'),
+    downloadPath: z.string().optional().describe('Custom directory for downloaded images (absolute path)'),
+    keyword: z.string().optional().describe('Keyword tag for this note (default: "未知")'),
   },
-  async ({ url, syncToFeishu = false, downloadMedia = false }) => {
+  async ({ url, syncToFeishu = false, downloadMedia = false, downloadPath, keyword }) => {
     const page = await newPage();
     const note = await captureNote(page, url);
     await page.close();
 
+    note.keyword = keyword ?? '未知';
+
     const lines = [
       `**标题**: ${note.title}`,
       `**作者**: ${note.author}`,
+      note.authorUrl ? `**主页**: ${note.authorUrl}` : '',
       `**类型**: ${note.noteType}`,
       `**点赞**: ${note.likeCount}  **收藏**: ${note.collectCount}  **评论**: ${note.commentCount}`,
       `**标签**: ${note.tags.join(' ')}`,
@@ -78,7 +85,7 @@ server.tool(
 
     if (downloadMedia && note.images.length > 0) {
       const meta: NoteFileMeta = { title: note.title, noteId: note.noteId, imageCategory: '详情', likeCount: note.likeCount };
-      const dl = await downloadAll(note.images, note.noteId, 3, meta);
+      const dl = await downloadAll(note.images, note.noteId, 3, meta, downloadPath);
       result.push(`\n**媒体下载**: ${dl.filter((d) => d.success).length}/${note.images.length} 成功`);
     }
 
@@ -107,7 +114,11 @@ server.tool(
       await page.close();
       if (syncToFeishu) await batchSyncSearchResults(results);
       const text = results
-        .map((r) => `${r.rank}. [${r.noteType}] ${r.title} — ${r.author} | 赞${r.likes}\n   ${r.tokenUrl || r.url}`)
+        .map((r) => {
+          let line = `${r.rank}. [${r.noteType}] ${r.title} — ${r.author} | 赞${r.likes}\n   ${r.tokenUrl || r.url}`;
+          if (r.authorUrl) line += `\n   博主主页: ${r.authorUrl}`;
+          return line;
+        })
         .join('\n');
       return {
         content: [{
@@ -126,6 +137,7 @@ server.tool(
         break;
       }
       const note = await captureNote(page, r.tokenUrl || r.url);
+      note.keyword = keyword;
       notes.push(note);
     }
     await page.close();
@@ -187,14 +199,20 @@ server.tool(
 // ─────────────────────────────────────────────────────────────────────────────
 server.tool(
   'xhs_capture_blogger_info',
-  'Capture blogger profile information (name, XHS ID, bio, follower count, avatar).',
+  'Capture blogger profile information (name, XHS ID, bio, follower count, avatar). ' +
+  'Accepts either a full profile URL or just a userId.',
   {
-    profileUrl: z.string().url().describe('Blogger profile URL'),
+    profileUrl: z.string().optional().describe('Blogger profile URL (full URL)'),
+    userId: z.string().optional().describe('Blogger user ID (e.g. "679395cf000000000a03f550") — will construct profile URL automatically'),
     syncToFeishu: z.boolean().optional().describe('Sync to Feishu 博主库 (default: false)'),
   },
-  async ({ profileUrl, syncToFeishu = false }) => {
+  async ({ profileUrl, userId, syncToFeishu = false }) => {
+    const url = profileUrl || (userId ? `https://www.xiaohongshu.com/user/profile/${userId}` : '');
+    if (!url) {
+      return { content: [{ type: 'text' as const, text: '请提供 profileUrl 或 userId 参数。' }] };
+    }
     const page = await newPage();
-    const info = await captureBloggerInfo(page, profileUrl);
+    const info = await captureBloggerInfo(page, url);
     await page.close();
 
     if (syncToFeishu) {
@@ -228,8 +246,10 @@ server.tool(
     urls: z.array(z.string().url()).describe('List of note URLs'),
     syncToFeishu: z.boolean().optional().describe('Sync all to Feishu 采集库 (default: false)'),
     downloadMedia: z.boolean().optional().describe('Download images for each note (default: false)'),
+    downloadPath: z.string().optional().describe('Custom directory for downloaded images (absolute path)'),
+    keyword: z.string().optional().describe('Keyword tag for all notes (default: "未知")'),
   },
-  async ({ urls, syncToFeishu = false, downloadMedia = false }) => {
+  async ({ urls, syncToFeishu = false, downloadMedia = false, downloadPath, keyword }) => {
     const page = await newPage();
     const notes = [];
     const errors: string[] = [];
@@ -241,10 +261,11 @@ server.tool(
       }
       try {
         const note = await captureNote(page, url);
+        note.keyword = keyword ?? '未知';
         notes.push(note);
         if (downloadMedia && note.images.length > 0) {
           const meta: NoteFileMeta = { title: note.title, noteId: note.noteId, imageCategory: '详情', likeCount: note.likeCount };
-          await downloadAll(note.images, note.noteId, 3, meta);
+          await downloadAll(note.images, note.noteId, 3, meta, downloadPath);
         }
       } catch (err) {
         errors.push(`${url}: ${err instanceof Error ? err.message : String(err)}`);
@@ -291,8 +312,86 @@ server.tool(
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Tool: xhs_search_blogger — search by name/keyword and return blogger profile + follower count
+// ─────────────────────────────────────────────────────────────────────────────
+server.tool(
+  'xhs_search_blogger',
+  'Search for XiaoHongShu bloggers by name or keyword. Returns profile URL, follower count, and bio. ' +
+  'This tool searches notes, extracts unique author profiles, then visits each profile to get follower data.',
+  {
+    keyword: z.string().describe('Blogger name or search keyword'),
+    maxBloggers: z.number().optional().describe('Max bloggers to return (default: 5)'),
+    maxSearchResults: z.number().optional().describe('Max search results to scan for authors (default: 20)'),
+  },
+  async ({ keyword, maxBloggers = 5, maxSearchResults = 20 }) => {
+    const page = await newPage();
+    try {
+      // Step 1: search notes to find author profile URLs
+      const results = await captureSearchResults(page, keyword, maxSearchResults);
+
+      // Step 2: deduplicate authors by profile URL
+      const seen = new Set<string>();
+      const uniqueAuthors: Array<{ name: string; profileUrl: string }> = [];
+      for (const r of results) {
+        if (!r.authorUrl || seen.has(r.authorUrl)) continue;
+        seen.add(r.authorUrl);
+        uniqueAuthors.push({ name: r.author, profileUrl: r.authorUrl });
+        if (uniqueAuthors.length >= maxBloggers) break;
+      }
+
+      if (uniqueAuthors.length === 0) {
+        await page.close();
+        return {
+          content: [{ type: 'text' as const, text: `搜索"${keyword}"未找到博主主页链接。` }],
+        };
+      }
+
+      // Step 3: visit each profile to get follower count
+      const bloggerInfos: Array<{ name: string; profileUrl: string; followers: number; bio: string; bloggerId: string }> = [];
+      for (const author of uniqueAuthors) {
+        try {
+          const info = await captureBloggerInfo(page, author.profileUrl);
+          bloggerInfos.push({
+            name: info.bloggerName || author.name,
+            profileUrl: author.profileUrl,
+            followers: info.followersCount,
+            bio: info.description,
+            bloggerId: info.bloggerId,
+          });
+        } catch {
+          bloggerInfos.push({
+            name: author.name,
+            profileUrl: author.profileUrl,
+            followers: -1,
+            bio: '（获取失败）',
+            bloggerId: '',
+          });
+        }
+      }
+
+      await page.close();
+
+      const lines = bloggerInfos.map((b, i) => {
+        const followStr = b.followers >= 0 ? `${b.followers}` : '未知';
+        return `${i + 1}. **${b.name}**${b.bloggerId ? ` (${b.bloggerId})` : ''}\n   粉丝: ${followStr} | 简介: ${b.bio || '无'}\n   主页: ${b.profileUrl}`;
+      });
+
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `搜索"${keyword}"找到 ${bloggerInfos.length} 个博主:\n\n${lines.join('\n\n')}`,
+        }],
+      };
+    } catch (err) {
+      await page.close();
+      throw err;
+    }
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Start
 // ─────────────────────────────────────────────────────────────────────────────
 const transport = new StdioServerTransport();
 await server.connect(transport);
-console.error('[xhs-pro-mcp] Server started — 23 tools registered');
+console.error('[xhs-pro-mcp] Server started — 25 tools registered');

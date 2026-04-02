@@ -90,8 +90,11 @@ export async function downloadFile(
   url: string,
   subDir = '',
   customName?: string,
+  outputDir?: string,
 ): Promise<DownloadResult> {
-  const dir = subDir ? resolve(config.downloadsDir, subDir) : config.downloadsDir;
+  const dir = outputDir
+    ? (subDir ? resolve(outputDir, subDir) : outputDir)
+    : (subDir ? resolve(config.downloadsDir, subDir) : config.downloadsDir);
   mkdirSync(dir, { recursive: true });
 
   const fileName  = customName ?? buildFileName(url);
@@ -150,6 +153,7 @@ export async function downloadAll(
   subDir = '',
   concurrency = 3,
   meta?: NoteFileMeta,
+  outputDir?: string,
 ): Promise<DownloadResult[]> {
   const results: DownloadResult[] = [];
 
@@ -159,11 +163,10 @@ export async function downloadAll(
       batch.map((url, batchIdx) => {
         const globalIdx = i + batchIdx;
         const name = buildFileName(url, meta, globalIdx);
-        return downloadFile(url, subDir, name);
+        return downloadFile(url, subDir, name, outputDir);
       }),
     );
     results.push(...batchResults);
-    // Add a natural pause between batches
     if (i + concurrency < urls.length) {
       await wait(gaussian(800, 250));
     }

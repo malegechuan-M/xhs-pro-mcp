@@ -112,6 +112,7 @@ export async function syncNoteToFeishu(note: NoteData): Promise<SyncResult> {
     [f('采集库', 'videoUrl'),     note.videoUrl],
     [f('采集库', 'publishTime'),  note.publishTime],
     [f('采集库', 'capturedAt'),   toUnixSec(note.capturedAt)],
+    [f('采集库', 'keyword'),      note.keyword],
   ]);
   // dedup on URL (always present), fall back to noteId field
   const dedupeField = f('采集库', 'url') || f('采集库', 'noteId');
@@ -139,6 +140,7 @@ export async function batchSyncNotesToFeishu(notes: NoteData[]): Promise<SyncRes
       [f('采集库', 'videoUrl'),     n.videoUrl],
       [f('采集库', 'publishTime'),  n.publishTime],
       [f('采集库', 'capturedAt'),   toUnixSec(n.capturedAt)],
+      [f('采集库', 'keyword'),      n.keyword],
     ]),
   }));
   return batchCreate(base, tId, records);

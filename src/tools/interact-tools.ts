@@ -5,6 +5,9 @@
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
+import { mkdirSync, writeFileSync } from 'fs';
+import { resolve } from 'path';
+import { homedir } from 'os';
 import { newPage } from '../browser/launcher.js';
 import { checkCaptcha, captureSearchResults, captureComments } from '../engines/dom/capturer.js';
 import { humanClick, humanClickLocator, humanType, humanTypeLocator, wait, gaussian, THINK, GLANCE, HESITATE } from '../browser/human.js';
@@ -254,13 +257,15 @@ export function registerInteractTools(server: McpServer): void {
   // ── capture_comments ──────────────────────────────────────────────────────
   server.tool(
     'xhs_capture_comments',
-    'Capture comments from a XiaoHongShu note, including replies.',
+    'Capture comments from a XiaoHongShu note, including replies. Optionally save to local JSON file.',
     {
       noteId: z.string().describe('Note ID'),
       limit: z.number().optional().describe('Max comments to capture (default: 50)'),
       includeReplies: z.boolean().optional().describe('Include sub-replies (default: true)'),
+      saveToFile: z.boolean().optional().describe('Save comments to local JSON file (default: false)'),
+      savePath: z.string().optional().describe('Custom directory for JSON output. Defaults to ~/.xhs-pro-mcp/downloads/comments/'),
     },
-    async ({ noteId, limit = 50, includeReplies = true }) => {
+    async ({ noteId, limit = 50, includeReplies = true, saveToFile = false, savePath }) => {
       const page = await newPage();
       try {
         const comments = await captureComments(page, noteId, limit, includeReplies);
@@ -282,11 +287,27 @@ export function registerInteractTools(server: McpServer): void {
           return line;
         });
 
+        let resultText = `笔记 ${noteId} 共采集 ${comments.length} 条评论:\n\n${lines.join('\n\n')}`;
+
+        if (saveToFile) {
+          const outputDir = savePath
+            ? savePath
+            : resolve(homedir(), '.xhs-pro-mcp', 'downloads', 'comments');
+          mkdirSync(outputDir, { recursive: true });
+
+          const filePath = resolve(outputDir, `${noteId}_comments.json`);
+          const jsonData = {
+            noteId,
+            capturedAt: new Date().toISOString(),
+            totalComments: comments.length,
+            comments,
+          };
+          writeFileSync(filePath, JSON.stringify(jsonData, null, 2), 'utf-8');
+          resultText += `\n\n**已保存**: ${filePath}`;
+        }
+
         return {
-          content: [{
-            type: 'text' as const,
-            text: `笔记 ${noteId} 共采集 ${comments.length} 条评论:\n\n${lines.join('\n\n')}`,
-          }],
+          content: [{ type: 'text' as const, text: resultText }],
         };
       } finally {
         await page.close();

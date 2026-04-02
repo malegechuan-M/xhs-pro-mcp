@@ -25,7 +25,7 @@ const DEFAULT_FIELDS: FeishuFieldMaps = {
     author: '作者', authorUrl: '作者主页', likeCount: '点赞数',
     collectCount: '收藏数', commentCount: '评论数', tags: '标签',
     noteType: '笔记类型', imageCount: '图片数量', videoUrl: '视频链接',
-    publishTime: '发布时间', capturedAt: '采集时间',
+    publishTime: '发布时间', capturedAt: '采集时间', keyword: '采集关键词',
   },
   关键词战情库: {
     keyword: '关键词', rank: '排名', noteId: '笔记ID', url: '原始链接',

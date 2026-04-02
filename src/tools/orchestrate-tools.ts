@@ -39,6 +39,8 @@ export function registerOrchestrateTools(server: McpServer): void {
       downloadImages: z.boolean().optional().describe('Download images to local storage (default: true)'),
       syncToFeishu: z.boolean().optional().describe('Sync to Feishu tables (default: true)'),
       uploadAttachments: z.boolean().optional().describe('Upload downloaded images to Feishu attachment fields (default: false)'),
+      downloadPath: z.string().optional().describe('Custom directory for downloaded images (absolute path)'),
+      keyword: z.string().optional().describe('Keyword tag for notes — auto-set for type=keyword; default "未知" for type=note'),
     },
     async ({
       type,
@@ -48,6 +50,8 @@ export function registerOrchestrateTools(server: McpServer): void {
       downloadImages = true,
       syncToFeishu = true,
       uploadAttachments = false,
+      downloadPath,
+      keyword,
     }) => {
       const report: string[] = [`## 一站式采集 [${type}]: ${target}\n`];
       const page = await newPage();
@@ -69,7 +73,7 @@ export function registerOrchestrateTools(server: McpServer): void {
             for (const r of results) {
               if (!r.coverImage) continue;
               const meta: NoteFileMeta = { title: r.title, noteId: r.noteId, imageCategory: '封面', likeCount: r.likes, keyword: target };
-              const dl = await downloadAll([r.coverImage], target, 1, meta);
+              const dl = await downloadAll([r.coverImage], target, 1, meta, downloadPath);
               if (dl[0]?.success) { dlOk++; dlSize += dl[0].size; }
             }
             report.push(`**图片下载**: ${dlOk}/${results.length} 封面图 (${formatBytes(dlSize)})`);
@@ -92,7 +96,7 @@ export function registerOrchestrateTools(server: McpServer): void {
             for (const n of notes) {
               if (!n.coverImage) continue;
               const meta: NoteFileMeta = { title: n.title, noteId: n.noteId, imageCategory: '封面', likeCount: n.likes };
-              const dl = await downloadAll([n.coverImage], subDir, 1, meta);
+              const dl = await downloadAll([n.coverImage], subDir, 1, meta, downloadPath);
               if (dl[0]?.success) { dlOk++; dlSize += dl[0].size; }
             }
             report.push(`**图片下载**: ${dlOk}/${notes.length} 封面图 (${formatBytes(dlSize)})`);
@@ -116,6 +120,7 @@ export function registerOrchestrateTools(server: McpServer): void {
           const note = await captureNote(page, target);
           capturedCount = 1;
           noteId = note.noteId;
+          note.keyword = keyword ?? '未知';
           report.push(`**采集**: ${note.title}`);
           report.push(`  作者: ${note.author} | 赞${note.likeCount} 藏${note.collectCount} 评${note.commentCount}`);
           report.push(`  图片: ${note.images.length} 张 | 类型: ${note.noteType}`);
@@ -123,7 +128,7 @@ export function registerOrchestrateTools(server: McpServer): void {
           // Download images for note type
           if (downloadImages && note.images.length > 0) {
             const meta: NoteFileMeta = { title: note.title, noteId: note.noteId, imageCategory: '详情', likeCount: note.likeCount };
-            const dl = await downloadAll(note.images, noteId, 3, meta);
+            const dl = await downloadAll(note.images, noteId, 3, meta, downloadPath);
             const ok = dl.filter((d) => d.success);
             downloadedImages = ok.map((d) => d.localPath);
             const totalSize = ok.reduce((s, d) => s + d.size, 0);
@@ -138,7 +143,7 @@ export function registerOrchestrateTools(server: McpServer): void {
             if (uploadAttachments && downloadedImages.length > 0 && r.recordId) {
               const tableId = config.feishu.tables['采集库'];
               const appToken = config.feishu.appToken;
-              const fieldId = '图片附件'; // field name as ID — may need the actual field ID from Feishu
+              const fieldId = '图片附件';
 
               if (tableId && appToken) {
                 let uploaded = 0;

@@ -26,6 +26,7 @@ export interface NoteData {
   noteType: '图文' | '视频';
   publishTime: string;
   capturedAt: string;
+  keyword?: string;
 }
 
 export interface SearchResult {
@@ -36,6 +37,7 @@ export interface SearchResult {
   tokenUrl?: string;  // full URL with xsec_token, used for navigation
   title: string;
   author: string;
+  authorUrl?: string; // author profile URL extracted from search card
   likes: number;
   noteType: '图文' | '视频';
   coverImage: string;
@@ -572,6 +574,17 @@ export async function captureSearchResults(
             })()
           );
 
+          // Extract author profile URL from the card
+          const profileHref = hrefs.find((h) => h.includes('/user/profile/'));
+          let authorUrl = '';
+          if (profileHref) {
+            const raw = profileHref.startsWith('http') ? profileHref
+              : profileHref.startsWith('/') ? `https://www.xiaohongshu.com${profileHref}`
+              : `https://www.xiaohongshu.com/${profileHref}`;
+            // Strip query params — profile pages don't need xsec_token
+            authorUrl = raw.split('?')[0];
+          }
+
           return {
             keyword,
             noteId,
@@ -579,11 +592,12 @@ export async function captureSearchResults(
             tokenUrl: hrefRaw,  // full URL with xsec_token for navigation
             title: titleEl?.textContent?.trim() ?? '无标题',
             author: authorText,
+            authorUrl,
             likes,
             noteType: (!!card.querySelector(SEARCH_CARD_VIDEO_MARKER) ? '视频' : '图文') as '图文' | '视频',
             coverImage: imgUrl,
           };
-        }).filter(Boolean) as Array<{ keyword: string; noteId: string; url: string; tokenUrl: string; title: string; author: string; likes: number; noteType: '图文' | '视频'; coverImage: string }>;
+        }).filter(Boolean) as Array<{ keyword: string; noteId: string; url: string; tokenUrl: string; title: string; author: string; authorUrl: string; likes: number; noteType: '图文' | '视频'; coverImage: string }>;
       },
       {
         SEARCH_CARD: SEL.SEARCH_CARD,
@@ -922,7 +936,8 @@ export async function captureComments(
   includeReplies = true,
 ): Promise<CommentData[]> {
   const notePageUrl = `https://www.xiaohongshu.com/explore/${noteId}`;
-  await page.goto(notePageUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+  const resolvedUrl = await resolveTokenUrl(page, notePageUrl);
+  await page.goto(resolvedUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
   await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
 
   // Wait for the comment section to load
